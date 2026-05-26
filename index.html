@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Capacitor — Cinematic STEM Visualization</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Exo+2:wght@300;400;600&display=swap');
+
+  :root {
+    --blue: #00d4ff;
+    --blue-dim: #0077aa;
+    --red: #ff4455;
+    --gold: #ffc844;
+    --green: #00ff88;
+    --white: #e8f4ff;
+    --bg: #020b18;
+    --panel: rgba(0,20,45,0.85);
+    --glow-b: 0 0 18px #00d4ffaa, 0 0 40px #00d4ff44;
+    --glow-r: 0 0 18px #ff4455aa, 0 0 40px #ff445544;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    color: var(--white);
+    font-family: 'Exo 2', sans-serif;
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px;
+    border-bottom: 1px solid #00d4ff33;
+    background: rgba(0,10,28,0.9);
+    position: sticky; top:0; z-index:100;
+  }
+  .logo { font-family:'Orbitron',monospace; font-size:1.1rem; color:var(--blue); letter-spacing:.2em; }
+  .logo span { color:var(--gold); }
+  .header-eq { font-family:'Share Tech Mono',monospace; font-size:.85rem; color:#00d4ff88; letter-spacing:.1em; }
+  .step-counter { font-family:'Orbitron',monospace; font-size:.75rem; color:var(--green); }
+
+  /* ── STAGE ── */
+  #stage {
+    position: relative;
+    width: 100%; max-width: 960px;
+    margin: 0 auto;
+    height: 480px;
+    overflow: hidden;
+  }
+  canvas#bg-canvas { position:absolute; inset:0; width:100%; height:100%; }
+  canvas#main-canvas { position:absolute; inset:0; width:100%; height:100%; }
+
+  /* ── HUD OVERLAYS ── */
+  .hud {
+    position: absolute; pointer-events: none;
+    font-family: 'Share Tech Mono', monospace;
+  }
+  #hud-title {
+    top:18px; left:50%; transform:translateX(-50%);
+    font-family:'Orbitron',monospace; font-size:1.05rem; font-weight:700;
+    color:var(--blue); text-shadow: var(--glow-b);
+    letter-spacing:.18em; text-transform:uppercase;
+    transition: all .5s;
+  }
+  #hud-phase {
+    bottom:14px; left:50%; transform:translateX(-50%);
+    font-size:.78rem; color:var(--gold); letter-spacing:.12em;
+    background: rgba(0,0,0,.45); padding:4px 16px; border-radius:20px;
+    border:1px solid #ffc84433;
+  }
+  #hud-eq-left { top:60px; left:16px; font-size:.75rem; color:var(--green); line-height:1.8; }
+  #hud-eq-right { top:60px; right:16px; font-size:.75rem; color:var(--blue); line-height:1.8; text-align:right; }
+  .eq-box {
+    background: rgba(0,20,40,.7); border:1px solid #00d4ff33;
+    border-radius:8px; padding:8px 12px; margin-bottom:6px;
+  }
+  .eq-val { color:var(--gold); font-size:.9rem; }
+
+  /* ── LABEL TAGS ── */
+  .label-tag {
+    position:absolute; pointer-events:none;
+    font-family:'Share Tech Mono',monospace; font-size:.65rem;
+    color:var(--blue); background:rgba(0,15,35,.8);
+    border:1px solid var(--blue); border-radius:3px;
+    padding:2px 7px; white-space:nowrap;
+    text-shadow: var(--glow-b);
+    transition: opacity .4s;
+  }
+  .label-tag.red { color:var(--red); border-color:var(--red); text-shadow:var(--glow-r); }
+  .label-tag.gold { color:var(--gold); border-color:var(--gold); }
+  .label-tag.green { color:var(--green); border-color:var(--green); }
+
+  /* ── APPLICATION PANELS ── */
+  #app-panels {
+    display: grid; grid-template-columns: repeat(6,1fr); gap:8px;
+    padding: 10px 20px;
+    border-top: 1px solid #00d4ff22;
+    background: rgba(0,8,22,.95);
+  }
+  .app-card {
+    background: var(--panel); border:1px solid #00d4ff22;
+    border-radius:8px; padding:10px 6px; text-align:center;
+    transition: border-color .3s, box-shadow .3s;
+  }
+  .app-card:hover { border-color:var(--blue); box-shadow:var(--glow-b); }
+  .app-icon { font-size:1.5rem; margin-bottom:4px; }
+  .app-label { font-family:'Share Tech Mono',monospace; font-size:.58rem; color:#aac8e8; letter-spacing:.06em; }
+
+  /* ── EQUATIONS ROW ── */
+  #eq-row {
+    display:flex; gap:10px; flex-wrap:wrap;
+    padding:10px 20px;
+    background:rgba(0,5,18,.97);
+    border-top:1px solid #00ff8822;
+  }
+  .eq-pill {
+    font-family:'Share Tech Mono',monospace; font-size:.82rem;
+    background:rgba(0,30,60,.8); border:1px solid #00d4ff44;
+    border-radius:6px; padding:5px 14px; color:var(--blue);
+    display:flex; align-items:center; gap:8px;
+  }
+  .eq-pill .sym { color:var(--gold); font-size:1rem; }
+
+  /* ── CONTROLS ── */
+  #controls {
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    padding:12px;
+    background:rgba(0,5,18,1);
+    border-top:1px solid #00d4ff22;
+  }
+  button {
+    font-family:'Orbitron',monospace; font-size:.7rem; letter-spacing:.1em;
+    padding:8px 18px; border-radius:6px; border:1px solid var(--blue);
+    background:rgba(0,30,60,.7); color:var(--blue); cursor:pointer;
+    transition: all .2s;
+  }
+  button:hover { background:rgba(0,80,160,.5); box-shadow:var(--glow-b); }
+  button.active { background:rgba(0,60,120,.8); box-shadow:var(--glow-b); }
+  #progress-bar {
+    flex:1; max-width:320px; height:4px;
+    background:#00d4ff22; border-radius:2px; overflow:hidden;
+  }
+  #progress-fill {
+    height:100%; background:linear-gradient(90deg,var(--blue),var(--gold));
+    border-radius:2px; transition:width .4s;
+  }
+
+  /* ── RC CURVE MINI GRAPH ── */
+  #rc-graph { position:absolute; bottom:44px; right:16px; pointer-events:none; }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width:6px; } ::-webkit-scrollbar-track { background:#020b18; }
+  ::-webkit-scrollbar-thumb { background:#00d4ff44; border-radius:3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">ELEC<span>TRON</span>ICS LAB</div>
+  <div class="header-eq">Capacitor Physics Visualization · 8K Simulation</div>
+  <div class="step-counter" id="step-counter">PHASE 1 / 8</div>
+</header>
+
+<div id="stage">
+  <canvas id="bg-canvas"></canvas>
+  <canvas id="main-canvas"></canvas>
+
+  <div class="hud" id="hud-title">CAPACITOR — CHARGE STORAGE DEVICE</div>
+  <div class="hud" id="hud-phase">▶ PHASE 1 — Capacitor Uncharged</div>
+
+  <!-- HUD equations left -->
+  <div class="hud" id="hud-eq-left">
+    <div class="eq-box">C = Q / V<br><span class="eq-val" id="eq-c">C = 100 μF</span></div>
+    <div class="eq-box">Q = C·V<br><span class="eq-val" id="eq-q">Q = 0.000 C</span></div>
+  </div>
+  <!-- HUD equations right -->
+  <div class="hud" id="hud-eq-right">
+    <div class="eq-box">E = ½CV²<br><span class="eq-val" id="eq-e">E = 0.000 J</span></div>
+    <div class="eq-box">V<sub>C</sub><br><span class="eq-val" id="eq-v">V = 0.0 V</span></div>
+  </div>
+
+  <!-- Floating labels -->
+  <div class="label-tag" id="lbl-pos" style="left:335px;top:115px;">⊕ Positive Plate</div>
+  <div class="label-tag red" id="lbl-neg" style="left:565px;top:115px;">⊖ Negative Plate</div>
+  <div class="label-tag gold" id="lbl-ef" style="left:430px;top:260px; opacity:0;">⚡ Electric Field</div>
+  <div class="label-tag green" id="lbl-sc" style="left:410px;top:300px; opacity:0;">◈ Stored Charge</div>
+  <div class="label-tag" id="lbl-di" style="left:420px;top:340px; opacity:0;">▣ Dielectric</div>
+  <div class="label-tag gold" id="lbl-vc" style="left:380px;top:78px; opacity:0;">↕ Voltage Across Cap</div>
+
+  <!-- RC graph canvas -->
+  <canvas id="rc-graph" width="140" height="80"></canvas>
+</div>
+
+<!-- Application panels -->
+<div id="app-panels">
+  <div class="app-card"><div class="app-icon">⚡</div><div class="app-label">Power<br>Supplies</div></div>
+  <div class="app-card"><div class="app-icon">🔊</div><div class="app-label">Audio<br>Systems</div></div>
+  <div class="app-card"><div class="app-icon">📷</div><div class="app-label">Camera<br>Flash</div></div>
+  <div class="app-card"><div class="app-icon">🖥️</div><div class="app-label">Mother-<br>boards</div></div>
+  <div class="app-card"><div class="app-icon">⚙️</div><div class="app-label">Motor<br>Start</div></div>
+  <div class="app-card"><div class="app-icon">⏱️</div><div class="app-label">Timing<br>Circuits</div></div>
+</div>
+
+<!-- Equations row -->
+<div id="eq-row">
+  <div class="eq-pill"><span class="sym">C</span> = Q / V &nbsp;[Farads]</div>
+  <div class="eq-pill"><span class="sym">E</span> = ½CV²</div>
+  <div class="eq-pill"><span class="sym">τ</span> = RC</div>
+  <div class="eq-pill"><span class="sym">V(t)</span> = V₀(1 − e<sup>−t/τ</sup>)</div>
+  <div class="eq-pill"><span class="sym">1F</span> = 1C / 1V</div>
+</div>
+
+<!-- Controls -->
+<div id="controls">
+  <button id="btn-prev">◀ PREV</button>
+  <div id="progress-bar"><div id="progress-fill" style="width:12.5%"></div></div>
+  <button id="btn-auto" class="active">⏸ AUTO</button>
+  <button id="btn-next">NEXT ▶</button>
+</div>
+
+<script>
+// ── SETUP ──────────────────────────────────────────────────────────────────
+const bgCanvas = document.getElementById('bg-canvas');
+const bgCtx = bgCanvas.getContext('2d');
+const mc = document.getElementById('main-canvas');
+const ctx = mc.getContext('2d');
+const stageEl = document.getElementById('stage');
+
+function resize() {
+  const w = stageEl.clientWidth, h = stageEl.clientHeight;
+  [bgCanvas, mc].forEach(c => { c.width = w; c.height = h; });
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ── STATE ──────────────────────────────────────────────────────────────────
+let phase = 0; // 0–7
+let time = 0;
+let autoPlay = true;
+let autoTimer = 0;
+const AUTO_DURATION = 380; // frames per phase
+const C_VALUE = 0.0001; // 100µF
+const V_SOURCE = 12; // volts
+
+// Particles
+class Particle {
+  constructor(x,y,vx,vy,color,radius,life) {
+    this.x=x; this.y=y; this.vx=vx; this.vy=vy;
+    this.color=color; this.radius=radius;
+    this.life=life; this.maxLife=life;
+  }
+  update() { this.x+=this.vx; this.y+=this.vy; this.life--; }
+  draw(c) {
+    const a = this.life/this.maxLife;
+    c.save(); c.globalAlpha=a*0.9;
+    c.shadowBlur=8; c.shadowColor=this.color;
+    c.fillStyle=this.color;
+    c.beginPath(); c.arc(this.x,this.y,this.radius,0,Math.PI*2); c.fill();
+    c.restore();
+  }
+}
+let particles = [];
+
+// ── GEOMETRY ──────────────────────────────────────────────────────────────
+function geo() {
+  const W = mc.width, H = mc.height;
+  const cx = W/2, cy = H/2 - 20;
+  const pw = 22, ph = 160, gap = 90;
+  return {
+    W, H, cx, cy, pw, ph, gap,
+    lx: cx - gap/2 - pw,  // left plate x
+    rx: cx + gap/2,        // right plate x
+    py: cy - ph/2,
+    midX: cx, midY: cy
+  };
+}
+
+// ── BACKGROUND GRID ────────────────────────────────────────────────────────
+function drawBackground() {
+  const {W,H} = {W:bgCanvas.width, H:bgCanvas.height};
+  bgCtx.clearRect(0,0,W,H);
+
+  // Deep space gradient
+  const grad = bgCtx.createRadialGradient(W/2,H/2,0, W/2,H/2,W*.7);
+  grad.addColorStop(0,'#020e20'); grad.addColorStop(1,'#010810');
+  bgCtx.fillStyle=grad; bgCtx.fillRect(0,0,W,H);
+
+  // Grid
+  bgCtx.strokeStyle='rgba(0,180,255,0.07)'; bgCtx.lineWidth=1;
+  const spacing=40;
+  for(let x=0;x<W;x+=spacing){ bgCtx.beginPath(); bgCtx.moveTo(x,0); bgCtx.lineTo(x,H); bgCtx.stroke(); }
+  for(let y=0;y<H;y+=spacing){ bgCtx.beginPath(); bgCtx.moveTo(0,y); bgCtx.lineTo(W,y); bgCtx.stroke(); }
+
+  // Corner brackets
+  const br=20, bw=40;
+  [[[0,0],[1,0],[0,1]], [[W,0],[-1,0],[0,1]], [[0,H],[1,0],[0,-1]], [[W,H],[-1,0],[0,-1]]].forEach(([p,dx,dy])=>{
+    bgCtx.strokeStyle='#00d4ff55'; bgCtx.lineWidth=2;
+    bgCtx.beginPath();
+    bgCtx.moveTo(p[0]+dx[0]*br, p[1]+dy[1]*br);
+    bgCtx.lineTo(p[0]+dx[0]*br+dx[0]*bw, p[1]+dy[1]*br);
+    bgCtx.moveTo(p[0]+dx[0]*br, p[1]+dy[1]*br);
+    bgCtx.lineTo(p[0]+dx[0]*br, p[1]+dy[1]*br+dy[1]*bw);
+    bgCtx.stroke();
+  });
+}
+
+// ── DRAW PHASES ──────────────────────────────────────────────────────────
+function chargeRatio() {
+  // 0-1 based on phase
+  if(phase<=1) return 0;
+  if(phase===2) return Math.min(0.5, autoTimer/AUTO_DURATION);
+  if(phase===3) return Math.min(0.75, 0.5 + autoTimer/AUTO_DURATION*0.25);
+  if(phase===4) return Math.min(0.9, 0.75 + autoTimer/AUTO_DURATION*0.15);
+  if(phase===5 || phase===6) return 1;
+  if(phase===7) return Math.max(0, 1 - autoTimer/AUTO_DURATION);
+  return 0;
+}
+
+function drawCapacitor(t) {
+  const g = geo();
+  const ratio = chargeRatio();
+  const {W,H,cx,cy,lx,rx,py,ph,pw,gap} = g;
+
+  ctx.clearRect(0,0,W,H);
+
+  // ── Glow beneath capacitor
+  const rg = ctx.createRadialGradient(cx,cy,10,cx,cy,180);
+  rg.addColorStop(0,'rgba(0,120,220,0.13)'); rg.addColorStop(1,'transparent');
+  ctx.fillStyle=rg; ctx.fillRect(0,0,W,H);
+
+  // ── Wire connections (voltage source)
+  if(phase>=1) {
+    const srcY = cy+50;
+    ctx.strokeStyle='#00d4ff'; ctx.lineWidth=3;
+    ctx.shadowBlur=12; ctx.shadowColor='#00d4ff';
+    // Left wire
+    ctx.beginPath(); ctx.moveTo(lx-60,srcY); ctx.lineTo(lx-60,py+ph/2);
+    ctx.lineTo(lx,py+ph/2); ctx.stroke();
+    // Right wire
+    ctx.beginPath(); ctx.moveTo(rx+pw+60,srcY); ctx.lineTo(rx+pw+60,py+ph/2);
+    ctx.lineTo(rx+pw,py+ph/2); ctx.stroke();
+    // Bottom wire connecting
+    ctx.beginPath(); ctx.moveTo(lx-60,srcY); ctx.lineTo(rx+pw+60,srcY); ctx.stroke();
+    ctx.shadowBlur=0;
+
+    // Voltage source symbol
+    const sx=cx, sy=srcY+22;
+    ctx.strokeStyle='#ffc844'; ctx.lineWidth=2;
+    ctx.shadowBlur=10; ctx.shadowColor='#ffc844';
+    ctx.beginPath(); ctx.arc(sx,sy,20,0,Math.PI*2); ctx.stroke();
+    ctx.fillStyle='#ffc844'; ctx.font='bold 14px Orbitron,monospace';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('V', sx, sy);
+    // + / - labels on source
+    ctx.font='12px Share Tech Mono,monospace';
+    ctx.fillStyle='#00d4ff'; ctx.fillText('+', sx-30, sy-5);
+    ctx.fillStyle='#ff4455'; ctx.fillText('−', sx+28, sy-5);
+    ctx.shadowBlur=0;
+  }
+
+  // ── Dielectric material
+  if(phase>=1) {
+    const diel = ctx.createLinearGradient(lx+pw, py, rx, py);
+    diel.addColorStop(0,'rgba(60,0,120,0.35)'); diel.addColorStop(0.5,'rgba(100,20,180,0.5)'); diel.addColorStop(1,'rgba(60,0,120,0.35)');
+    ctx.fillStyle=diel;
+    ctx.fillRect(lx+pw, py, gap, ph);
+    // Dielectric texture dots
+    ctx.fillStyle='rgba(180,100,255,0.1)';
+    for(let dx2=lx+pw+5; dx2<rx-5; dx2+=12) {
+      for(let dy2=py+8; dy2<py+ph-8; dy2+=12) {
+        ctx.beginPath(); ctx.arc(dx2,dy2,2,0,Math.PI*2); ctx.fill();
+      }
+    }
+    if(phase>=3) { document.getElementById('lbl-di').style.opacity='1'; }
+  }
+
+  // ── Left (positive) plate
+  const lGrad = ctx.createLinearGradient(lx,py,lx+pw,py);
+  lGrad.addColorStop(0,'#1a4a6a'); lGrad.addColorStop(0.5,'#3a8ac8'); lGrad.addColorStop(1,'#1a4a6a');
+  if(ratio>0) {
+    // tint more positive (blue→gold) as it charges
+    lGrad.addColorStop(1, `rgba(255,200,${Math.floor(68*(1-ratio))},${ratio*0.6})`);
+  }
+  ctx.fillStyle=lGrad;
+  ctx.shadowBlur = 10+ratio*20; ctx.shadowColor = `rgba(0,${Math.floor(180+ratio*75)},255,0.8)`;
+  ctx.fillRect(lx, py, pw, ph);
+  // Metallic highlight
+  ctx.fillStyle='rgba(255,255,255,0.15)';
+  ctx.fillRect(lx+3, py+4, 4, ph-8);
+  ctx.shadowBlur=0;
+
+  // ── Right (negative) plate
+  const rGrad = ctx.createLinearGradient(rx,py,rx+pw,py);
+  rGrad.addColorStop(0,'#1a4a6a'); rGrad.addColorStop(0.5,'#3a8ac8'); rGrad.addColorStop(1,'#1a4a6a');
+  if(ratio>0) {
+    rGrad.addColorStop(0, `rgba(255,${Math.floor(68*(1-ratio))},${Math.floor(68*(1-ratio))},${ratio*0.6})`);
+  }
+  ctx.fillStyle=rGrad;
+  ctx.shadowBlur = 10+ratio*20; ctx.shadowColor = `rgba(255,${Math.floor(80*(1-ratio))},${Math.floor(80*(1-ratio))},0.8)`;
+  ctx.fillRect(rx, py, pw, ph);
+  ctx.fillStyle='rgba(255,255,255,0.15)';
+  ctx.fillRect(rx+pw-7, py+4, 4, ph-8);
+  ctx.shadowBlur=0;
+
+  // ── Charge indicators on plates
+  if(ratio>0) {
+    const n = Math.floor(ratio*8)+1;
+    for(let i=0;i<n;i++) {
+      const y = py + (ph/(n+1))*(i+1);
+      // + on left plate
+      ctx.fillStyle='#ffc844'; ctx.font='bold 13px monospace';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.shadowBlur=8; ctx.shadowColor='#ffc844';
+      ctx.fillText('+', lx+pw/2, y);
+      // − on right plate
+      ctx.fillStyle='#ff4455'; ctx.shadowColor='#ff4455';
+      ctx.fillText('−', rx+pw/2, y);
+    }
+    ctx.shadowBlur=0;
+  }
+
+  // ── Electric field lines between plates
+  if(ratio>0.15) {
+    const nLines = 7;
+    const fieldAlpha = Math.min(1,(ratio-0.15)*3);
+    for(let i=0;i<nLines;i++) {
+      const fy = py + ph/(nLines+1)*(i+1);
+      const anim = Math.sin(t*0.04 + i*0.8)*4;
+      const grad = ctx.createLinearGradient(lx+pw,fy,rx,fy);
+      grad.addColorStop(0,'rgba(255,200,68,0.9)');
+      grad.addColorStop(0.5,'rgba(0,212,255,0.8)');
+      grad.addColorStop(1,'rgba(255,68,85,0.9)');
+      ctx.strokeStyle=grad; ctx.lineWidth=1.5;
+      ctx.globalAlpha=fieldAlpha*0.7;
+      ctx.shadowBlur=6; ctx.shadowColor='#00d4ff';
+      ctx.beginPath();
+      ctx.moveTo(lx+pw,fy+anim);
+      ctx.bezierCurveTo(lx+pw+gap*0.3,fy+anim*1.5, rx-gap*0.3,fy-anim*1.5, rx,fy+anim);
+      ctx.stroke();
+      // Arrow tip
+      ctx.fillStyle='rgba(0,212,255,'+fieldAlpha+')';
+      ctx.beginPath(); ctx.moveTo(rx-4,fy+anim-3); ctx.lineTo(rx,fy+anim); ctx.lineTo(rx-4,fy+anim+3); ctx.fill();
+      ctx.shadowBlur=0;
+    }
+    ctx.globalAlpha=1;
+    document.getElementById('lbl-ef').style.opacity=String(fieldAlpha);
+    document.getElementById('lbl-sc').style.opacity=String(Math.min(1,(ratio-0.5)*4));
+    document.getElementById('lbl-vc').style.opacity=String(fieldAlpha);
+  } else {
+    document.getElementById('lbl-ef').style.opacity='0';
+    document.getElementById('lbl-sc').style.opacity='0';
+  }
+
+  // ── Current flow arrows (electrons moving to right plate)
+  if(phase>=2 && phase<=6 && ratio<1) {
+    const flowAlpha = phase===7 ? 0 : (1-ratio)*0.9+0.2;
+    const arrowY = py + ph/2;
+    // Left side: conventional current flows IN to + plate
+    for(let ax=lx-55; ax<lx; ax+=20) {
+      const animX = ((ax + t*2.5) % (lx+60)) - 60 + lx-55;
+      ctx.fillStyle='#00ff88'; ctx.globalAlpha=flowAlpha*0.85;
+      ctx.shadowBlur=10; ctx.shadowColor='#00ff88';
+      ctx.beginPath(); ctx.moveTo(animX,arrowY-5); ctx.lineTo(animX+12,arrowY); ctx.lineTo(animX,arrowY+5); ctx.fill();
+    }
+    // Right side: electrons flow OUT from − plate
+    for(let ax=rx+pw; ax<rx+pw+60; ax+=20) {
+      const animX = ((ax + t*2.5) % 60) + rx+pw;
+      ctx.fillStyle='#ff4455'; ctx.globalAlpha=flowAlpha*0.85;
+      ctx.shadowBlur=10; ctx.shadowColor='#ff4455';
+      ctx.beginPath(); ctx.moveTo(animX+12,arrowY-5); ctx.lineTo(animX,arrowY); ctx.lineTo(animX+12,arrowY+5); ctx.fill();
+    }
+    ctx.globalAlpha=1; ctx.shadowBlur=0;
+  }
+
+  // ── Discharge current (phase 7)
+  if(phase===7 && ratio>0) {
+    const discAlpha = ratio*0.9;
+    const arrowY = py+ph/2+35;
+    for(let ax=lx-50; ax<rx+pw+50; ax+=22) {
+      const animX = ((ax - t*2) % (rx+pw+120)) + lx-50;
+      ctx.fillStyle='#ffc844'; ctx.globalAlpha=discAlpha*0.8;
+      ctx.shadowBlur=12; ctx.shadowColor='#ffc844';
+      ctx.beginPath(); ctx.moveTo(animX,arrowY-5); ctx.lineTo(animX+12,arrowY); ctx.lineTo(animX,arrowY+5); ctx.fill();
+    }
+    ctx.globalAlpha=1; ctx.shadowBlur=0;
+  }
+
+  // ── Floating charge particles
+  if(phase>=2 && phase<7 && ratio<0.98) {
+    if(Math.random()<0.35) {
+      const y = py + Math.random()*ph;
+      particles.push(new Particle(
+        lx-40+Math.random()*20, y,
+        1.5+Math.random(), (Math.random()-.5)*0.4,
+        '#00ff88', 2.5, 40
+      ));
+      particles.push(new Particle(
+        rx+pw+20+Math.random()*20, y,
+        -(1.5+Math.random()), (Math.random()-.5)*0.4,
+        '#ff4455', 2.5, 40
+      ));
+    }
+  }
+  if(phase===7) {
+    if(Math.random()<0.3) {
+      const midX2 = cx, midY2 = py+ph/2+30;
+      particles.push(new Particle(
+        midX2+(Math.random()-.5)*80, midY2+(Math.random()-.5)*30,
+        (Math.random()-.5)*3, -1-Math.random(),
+        '#ffc844', 2, 50
+      ));
+    }
+  }
+  particles = particles.filter(p=>p.life>0);
+  particles.forEach(p=>{ p.update(); p.draw(ctx); });
+
+  // ── Energy glow in dielectric when charged
+  if(ratio>0.5) {
+    const eg = ctx.createRadialGradient(cx,cy,0,cx,cy,gap*.6);
+    eg.addColorStop(0,`rgba(100,0,200,${ratio*0.18})`);
+    eg.addColorStop(1,'transparent');
+    ctx.fillStyle=eg;
+    ctx.fillRect(lx+pw,py,gap,ph);
+  }
+
+  // ── Capacitor body label
+  ctx.fillStyle='rgba(0,200,255,0.6)'; ctx.font='bold 10px Share Tech Mono,monospace';
+  ctx.textAlign='center';
+  ctx.fillText('100µF / 25V', cx, py-8);
+
+  // ── Update HUD values
+  const v = ratio * V_SOURCE;
+  const q = C_VALUE * v;
+  const e = 0.5 * C_VALUE * v * v;
+  document.getElementById('eq-v').textContent = `V = ${v.toFixed(2)} V`;
+  document.getElementById('eq-q').textContent = `Q = ${(q*1000).toFixed(3)} mC`;
+  document.getElementById('eq-e').textContent = `E = ${(e*1000).toFixed(4)} mJ`;
+  document.getElementById('eq-c').textContent = `C = 100 µF`;
+
+  // ── Draw RC curve
+  drawRCCurve(ratio);
+}
+
+function drawRCCurve(ratio) {
+  const rc = document.getElementById('rc-graph');
+  const rctx = rc.getContext('2d');
+  rctx.clearRect(0,0,140,80);
+  rctx.fillStyle='rgba(0,10,28,0.85)'; rctx.strokeStyle='#00d4ff44'; rctx.lineWidth=1;
+  rctx.fillRect(0,0,140,80);
+  rctx.strokeRect(0,0,140,80);
+  rctx.fillStyle='#00d4ff66'; rctx.font='8px Share Tech Mono';
+  rctx.fillText('RC Charging Curve', 4, 10);
+  // Axes
+  rctx.strokeStyle='#00d4ff44'; rctx.lineWidth=1;
+  rctx.beginPath(); rctx.moveTo(12,14); rctx.lineTo(12,70); rctx.lineTo(132,70); rctx.stroke();
+  // Curve
+  rctx.strokeStyle='#00ff88'; rctx.lineWidth=2; rctx.shadowBlur=6; rctx.shadowColor='#00ff88';
+  rctx.beginPath();
+  for(let x=0;x<=120;x++) {
+    const tNorm=x/120;
+    const y=70-52*(1-Math.exp(-tNorm*4));
+    if(x===0) rctx.moveTo(x+12,y); else rctx.lineTo(x+12,y);
+  }
+  rctx.stroke();
+  // Progress dot
+  const dotX=12+ratio*120, dotY=70-52*(1-Math.exp(-ratio*4));
+  rctx.fillStyle='#ffc844'; rctx.shadowColor='#ffc844'; rctx.shadowBlur=8;
+  rctx.beginPath(); rctx.arc(dotX,dotY,4,0,Math.PI*2); rctx.fill();
+  rctx.shadowBlur=0;
+  rctx.fillStyle='#aac8e8'; rctx.font='7px Share Tech Mono';
+  rctx.fillText('V(t)=V₀(1−e⁻ᵗ/ᵀ)', 14, 78);
+}
+
+// ── PHASE MANAGEMENT ────────────────────────────────────────────────────
+const phaseNames = [
+  'PHASE 1 — Capacitor Uncharged',
+  'PHASE 2 — Voltage Source Connected',
+  'PHASE 3 — Electrons Accumulate on Negative Plate',
+  'PHASE 4 — Positive Charge Forms on Opposite Plate',
+  'PHASE 5 — Electric Field Builds Between Plates',
+  'PHASE 6 — Capacitor Stores Electrical Energy',
+  'PHASE 7 — Charging Gradually Slows Down',
+  'PHASE 8 — Capacitor Discharges Energy Back'
+];
+const phaseTitles = [
+  'CAPACITOR — UNCHARGED STATE',
+  'VOLTAGE SOURCE CONNECTED',
+  'ELECTRON ACCUMULATION',
+  'CHARGE SEPARATION',
+  'ELECTRIC FIELD FORMATION',
+  'ENERGY STORAGE COMPLETE',
+  'CHARGING CURVE — RC TIME CONSTANT',
+  'ENERGY DISCHARGE'
+];
+
+function setPhase(p) {
+  phase = Math.max(0, Math.min(7, p));
+  autoTimer = 0;
+  document.getElementById('hud-phase').textContent = '▶ ' + phaseNames[phase];
+  document.getElementById('hud-title').textContent = phaseTitles[phase];
+  document.getElementById('step-counter').textContent = `PHASE ${phase+1} / 8`;
+  document.getElementById('progress-fill').style.width = ((phase+1)/8*100)+'%';
+  // Show/hide labels
+  document.getElementById('lbl-pos').style.opacity = phase>=1?'1':'0.5';
+  document.getElementById('lbl-neg').style.opacity = phase>=1?'1':'0.5';
+  document.getElementById('lbl-di').style.opacity = phase>=2?'1':'0';
+}
+
+// ── CONTROLS ─────────────────────────────────────────────────────────────
+document.getElementById('btn-next').onclick = ()=>{ setPhase(phase+1); };
+document.getElementById('btn-prev').onclick = ()=>{ setPhase(phase-1); };
+document.getElementById('btn-auto').onclick = ()=>{
+  autoPlay=!autoPlay;
+  document.getElementById('btn-auto').textContent = autoPlay?'⏸ AUTO':'▶ AUTO';
+  document.getElementById('btn-auto').classList.toggle('active',autoPlay);
+};
+
+// ── ANIMATION LOOP ────────────────────────────────────────────────────────
+function loop() {
+  time++;
+  if(autoPlay) {
+    autoTimer++;
+    if(autoTimer >= AUTO_DURATION) {
+      autoTimer=0;
+      if(phase<7) setPhase(phase+1);
+      else setPhase(0);
+    }
+  }
+  drawCapacitor(time);
+  requestAnimationFrame(loop);
+}
+
+// Init
+drawBackground();
+setPhase(0);
+loop();
+</script>
+</body>
+</html>
